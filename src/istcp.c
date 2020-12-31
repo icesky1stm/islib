@@ -15,6 +15,10 @@
 #include <sys/un.h>
 
 #include "istcp.h"
+#include <errno.h>
+
+/* nginx & redis, default value is 511 */
+#define ISTCP_DEFAULT_BACKLOG 511
 
 char * istcp_version(){
     return ISTCP_VERSION_NO;
@@ -48,33 +52,6 @@ int istcp_connect(char *ip,  int port){
     }
 
     return sock;
-}
-
-/*** unix域socket ***/
-int istcp_connect_unix(char *pathname)
-{
-    int sock;
-    struct sockaddr_un sun;
-
-    memset(&sun, 0x00, sizeof(sun));
-
-    sun.sun_family = AF_UNIX;
-    if( strlen( pathname) >= sizeof(sun.sun_path)){
-        return ISTCP_ERROR_UNIXPATH_TOOLONG;
-    };
-    strcpy (sun.sun_path, pathname);
-
-    if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0){
-        return ISTCP_ERROR_SOCKET;
-    }
-
-    if (connect(sock, (struct sockaddr *)&sun, sizeof(sun)) < 0){
-        close(sock);
-        return ISTCP_ERROR_CONNECT;
-    }
-
-    return sock;
-
 }
 
 /*** 按超时时间接收固定长度内容  ***/
@@ -167,7 +144,7 @@ int istcp_recv(int sock, char *msgbuf, int len, int timeout){
             msgbuf += ret;
         }
     }
-    return 0;
+    return len;
 }
 
 /*** 按超时时间等待,试图读一次接收固定长度内容，返回实际读取长度,不可靠的通讯模式，仅用于对方无法约定报文长度时使用 ***/
@@ -295,7 +272,7 @@ int istcp_send(int sock, char *msgbuf, int len, int timeout){
         }
     }
 
-    return 0;
+    return len;
 
 }
 
@@ -387,6 +364,74 @@ int istcp_listen_backlog(char *hostname, int port, int backlog){
 
 /** 标准绑定监听服务 **/
 int istcp_listen(char *hostname, int port){
-    return istcp_listen_backlog( hostname, port, 10);
+    return istcp_listen_backlog( hostname, port, ISTCP_DEFAULT_BACKLOG);
 }
 
+/** unix域socket **/
+int istcp_listen_unix(char *pathname){
+
+    int ret;
+    int sock;
+    int optLen, optVar;
+    struct sockaddr_un sun;
+
+    /** 先判断长度是否超限 **/
+    if( strlen( pathname) >= sizeof(sun.sun_path)){
+        return ISTCP_ERROR_UNIXPATH_TOOLONG;
+    }
+
+    memset(&sun, 0x00, sizeof(sun));
+    sun.sun_family= AF_UNIX;
+    strcpy( sun.sun_path, pathname);
+
+    if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0){
+        return ISTCP_ERROR_SOCKET;
+    }
+
+    /** 删除原信息 **/
+    remove( sun.sun_path);
+    optVar = 1;
+    optLen = sizeof(optVar);
+    ret = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&optVar, optLen);
+    if (ret < 0){
+        return ISTCP_ERROR_SETSOCKOPT;
+    }
+
+    if (bind(sock, (struct sockaddr *)&sun, sizeof(sun)) < 0){
+        close(sock);
+        return ISTCP_ERROR_BIND;
+    }
+
+    if (listen(sock, ISTCP_DEFAULT_BACKLOG) < 0){
+        close(sock);
+        return ISTCP_ERROR_LISTEN;
+    }
+
+    return sock;
+}
+
+int istcp_connect_unix(char *pathname)
+{
+    int sock;
+    struct sockaddr_un sun;
+
+    memset(&sun, 0x00, sizeof(sun));
+
+    sun.sun_family = AF_UNIX;
+    if( strlen( pathname) >= sizeof(sun.sun_path)){
+        return ISTCP_ERROR_UNIXPATH_TOOLONG;
+    }
+    strcpy (sun.sun_path, pathname);
+
+    if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0){
+        return ISTCP_ERROR_SOCKET;
+    }
+
+    if (connect(sock, (struct sockaddr *)&sun, sizeof(sun)) < 0){
+        close(sock);
+        return ISTCP_ERROR_CONNECT;
+    }
+
+    return sock;
+
+}

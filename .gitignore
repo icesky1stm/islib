@@ -1,3 +1,5 @@
+islib.so
+*_test
 # Prerequisites
 *.d
 

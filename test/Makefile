@@ -1,9 +1,12 @@
 ### 基本参数定义
 BIN  := \
-islib_test \
+main_islib_test \
 
+OBJ  += islib_test
 OBJ  += istime_test
 OBJ  += isstr_test
+OBJ  += istcp_test
+OBJ  += islog_test
 
 LIBS := islib.so aaaa
 CFLAGS  += -Wall -std=c99 -I../src/
@@ -20,7 +23,7 @@ $(BIN): $(OBJ)
 
 .PHONY: clean
 clean:
-	rm -f *_test
+	rm -f *_test istest_unix
 
 %.c:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) -o $@ $<
