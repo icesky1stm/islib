@@ -6,6 +6,9 @@ SRC  += istime.c
 SRC  += isstr.c
 SRC  += islog.c
 SRC  += istcp.c
+SRC  += isfile.c
+SRC  += isipc.c
+SRC  += isatom.c
 
 # 定义基本路径
 OBJDIR := obj
@@ -52,8 +55,7 @@ clean:
 $(OBJDIR):
 	@mkdir -p $@
 
-$(OBJDIR)/%.o : %.c
-#echo CC $<
+$(OBJDIR)/%.o : %.c %.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 

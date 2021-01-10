@@ -9,7 +9,7 @@ char * isstr_version(){
     return ISSTR_VERSION_NO;
 }
 
-/** 去除字符串的前后空格 **/
+/** 去除字符串的前后空格,中间的空格不会去掉 **/
 char *isstr_trim(char *str)
 {
     int i;
@@ -34,4 +34,43 @@ char *isstr_trim(char *str)
         return str;
     }
     else return str;
+}
+
+char * isstr_split(char *str, char * sign, int num, char * value){
+    int i;
+    char *p, *q;
+    int sign_len;
+
+    sign_len = strlen(sign);
+
+    q = str;
+
+    num--;
+
+    /** 跳过前 num 个 sign,查找开始位置 **/
+    while(num != 0){
+        q = strstr( q, sign);
+        if( q == NULL){
+            return NULL;
+        }
+        q = q + sign_len;
+        num--;
+    }
+
+    /* 开始位置 */
+    p = q;
+
+    /** 获取下一个sign, 或者结尾 **/
+    q = strstr(q, sign);
+    if( q == NULL){
+        i = strlen(p);
+    }else{
+        i = q - p;
+    }
+
+    strncpy(value, p, i);
+    value[i] = 0x00;
+
+    return value;
+
 }

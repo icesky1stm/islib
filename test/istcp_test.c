@@ -5,11 +5,12 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <errno.h>
 #include "../src/istcp.h"
 
-#define TEST_PORT 28001
-#define TEST_UNIX_PATH "./istest_unix"
+#define TEST_PORT 28111
+#define TEST_UNIX_PATH "./istest_unix_tmp"
 
 int istcptest_server(){
     char * ip;
@@ -18,7 +19,7 @@ int istcptest_server(){
     int conn_sock = 0;
     char msg[200];
 
-    listen_sock = istcp_listen("127.0.0.1", TEST_PORT);
+    listen_sock = istcp_listen(TEST_PORT);
     if( listen_sock < 0 ){
         printf("listen error [%d],[%s]\n", listen_sock, strerror(errno));
         return -5;

@@ -9,10 +9,7 @@
 #include "../src/istime.h"
 
 int main(){
-    printf(" timezone--[%d], [%d]\n", (int)timezone, (int)daylight);
-    tzset(); /* Now 'timezome' global is populated. */
-    printf(" timezone--[%d], [%d]\n", (int)timezone, (int)daylight);
-
+    printf( "timezone = [%ld]\n", timezone);
     printf("istime_version = [%s]\n", istime_version());
     printf("istime_us = [%llu]\n", istime_us());
 
@@ -23,18 +20,7 @@ int main(){
 
     printf( "istime_longdate = [%ld]\n", istime_longdate());
     printf( "istime_longtime = [%ld]\n", istime_longtime());
-
-    time_t t = time(NULL);
-    struct tm *aux = localtime(&t);
-    int daylight_active = aux->tm_isdst;
-
-    struct tm tm;
-    char buf[1024];
-
-    nolocks_localtime(&tm,t,timezone,daylight_active);
-    strftime(buf,sizeof(buf),"%d %b %H:%M:%S",&tm);
-    printf("[timezone: %d, dl: %d %s\n", (int)timezone, (int)daylight_active, buf);
-    printf(" timezone--[%d], [%d], [%d]\n", (int)timezone, (int)daylight, (int)daylight_active );
+    printf( "timezone = [%ld]\n", timezone);
 
     return 0;
 }

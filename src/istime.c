@@ -10,6 +10,7 @@ uint64_t的长度(20-1位): 18446744073709551615
 #include <sys/time.h>
 
 #include "istime.h"
+static void nolocks_localtime(time_t *p_t, struct tm *tmp);
 
 char * istime_version(){
     return ISTIME_VERSION_NO;
@@ -45,7 +46,7 @@ uint32_t istime_strftime(char * strtime, uint32_t maxsize, const char * format, 
     struct tm local_time;
 
     /*** TODO 可能会锁，后续改为redis的 nonblock_localtime 写法 ***/
-    localtime_r( &t.tv_sec, &local_time);
+    nolocks_localtime( &t.tv_sec, &local_time);
     return strftime(strtime, maxsize, format, &local_time);
 }
 
@@ -62,7 +63,7 @@ long istime_longtime(){
     time_t t = time(0);
     struct tm local_time;
 
-    localtime_r(&t, &local_time);
+    nolocks_localtime(&t, &local_time);
     return local_time.tm_hour*10000 + local_time.tm_min*100 + local_time.tm_sec;
 }
 
@@ -70,7 +71,7 @@ long istime_longdate(){
     time_t t = time(0);
     struct tm local_time;
 
-    localtime_r(&t, &local_time);
+    nolocks_localtime(&t, &local_time);
     return (local_time.tm_year+1900)*10000 + (local_time.tm_mon+1)*100 + local_time.tm_mday;
 }
 
@@ -82,12 +83,21 @@ static int is_leap_year(time_t year) {
     else return 1;                  /* If div by 100 and 400 is leap. */
 }
 
-void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
+static void nolocks_localtime(time_t *p_t, struct tm *tmp) {
+    /*** 在redis代码的基础上，做了修改  ***/
+    static int static_tz_set = 0;
+    int dst = 0; // 不支持夏令时，因为这是中国
+    if( static_tz_set == 0){
+        tzset();
+        static_tz_set = 1;
+    }
+
+    time_t t = *p_t;
     const time_t secs_min = 60;
     const time_t secs_hour = 3600;
     const time_t secs_day = 3600*24;
 
-    t -= tz;                            /* Adjust for timezone. */
+    t -= timezone;                      /* Adjust for timezone. */
     t += 3600*dst;                      /* Adjust for daylight time. */
     time_t days = t / secs_day;         /* Days passed since epoch. */
     time_t seconds = t % secs_day;      /* Remaining seconds. */

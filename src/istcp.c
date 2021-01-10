@@ -19,6 +19,7 @@
 
 /* nginx & redis, default value is 511 */
 #define ISTCP_DEFAULT_BACKLOG 511
+#define ISTCP_DEFAULT_TIMEOUT 60
 
 char * istcp_version(){
     return ISTCP_VERSION_NO;
@@ -211,7 +212,6 @@ int istcp_recv_nowait(int sock, char *msgbuf, int len, int timeout){
     return ret;
 }
 
-
 /*** 按长度发送内容 ***/
 int istcp_send(int sock, char *msgbuf, int len, int timeout){
     int    ret;
@@ -363,8 +363,8 @@ int istcp_listen_backlog(char *hostname, int port, int backlog){
 }
 
 /** 标准绑定监听服务 **/
-int istcp_listen(char *hostname, int port){
-    return istcp_listen_backlog( hostname, port, ISTCP_DEFAULT_BACKLOG);
+int istcp_listen(int port){
+    return istcp_listen_backlog( "127.0.0.1", port, ISTCP_DEFAULT_BACKLOG);
 }
 
 /** unix域socket **/

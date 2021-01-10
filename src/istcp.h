@@ -5,7 +5,7 @@
 #ifndef ISTCP_H
 #define ISTCP_H
 
-#define ISTCP_VERSION_NO "20.12.2"
+#define ISTCP_VERSION_NO "20.12.3"
 char * istcp_version();
 
 
@@ -26,13 +26,12 @@ char * istcp_version();
 #define ISTCP_ERROR_UNIXPATH_TOOLONG -105
 
 int istcp_connect(char *ip,  int port);
-
 int istcp_send(int sock, char *msgbuf, int len, int timeout);
 int istcp_recv(int sock, char *msgbuf, int len, int timeout);
 int istcp_recv_nowait(int sock, char *msgbuf, int len, int timeout);
 void istcp_close(int sock);
 
-int istcp_listen(char *hostname, int port);
+int istcp_listen(int port);
 int istcp_listen_backlog(char *hostname, int port, int backlog);
 
 int istcp_accept(int sock);

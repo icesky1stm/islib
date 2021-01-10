@@ -7,8 +7,12 @@ OBJ  += istime_test
 OBJ  += isstr_test
 OBJ  += istcp_test
 OBJ  += islog_test
+OBJ  += isfile_test
+OBJ  += isipc_test
+OBJ  += isatom_test
 
-LIBS := islib.so aaaa
+LIBS := islib.so
+
 CFLAGS  += -Wall -std=c99 -I../src/
 
 LDFLAGS += ../islib.so
@@ -23,7 +27,7 @@ $(BIN): $(OBJ)
 
 .PHONY: clean
 clean:
-	rm -f *_test istest_unix
+	rm -f *_test *_tmp
 
 %.c:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) -o $@ $<
