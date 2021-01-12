@@ -18,32 +18,27 @@ void * thread_main(void * arg);
 int main(){
     printf("version = [%s]\n", islog_version());
     pthread_t threads[20];
+
     int i;
     for( i = 0; i < 10; i++ ){
-        pthread_create(&threads[i], NULL, &thread_main, &threads[i]);
+        pthread_create(&threads[i], NULL, &thread_main, i);
     }
 
     usleep(100000);
     wait_flag = 1;
-//    pthread_join(threads[19], NULL);
-    usleep(100000);
+    for ( i = 0; i < 10 ; i++){
+        pthread_join(threads[i], NULL);
+    }
 
     return 0;
 }
 void * thread_main(void * arg){
     pthread_t *tt;
     char isodate[20] = "LOGBUFFFFFFFF";
+    int i = (int)arg;
 
-    tt = (pthread_t *) arg;
-    while( wait_flag == 0){
-        ;
-    }
-    islog_debug("%s", isodate);
-    islog_info("%s", isodate);
-    islog_error("%s", isodate);
-    islog_warn_t("TAG1", "%s", isodate);
-    islog_warn_t("TAG2", "%s", isodate);
-    islog_warn_t("TAG3", "%s", isodate);
-    islog_warn("%s", isodate);
+    islog_debug("%s(%d)", isodate, i);
+    islog_warn("%s(%d)", isodate, i);
+    islog_warn_t("TAG", "%s(%d)", isodate, i);
     return 0;
 }

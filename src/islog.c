@@ -46,6 +46,8 @@
 #include <errno.h>
 
 #include "islog.h"
+
+#include "isstr.h"
 #include "istime.h"
 
 /** 版本信息 **/
@@ -73,6 +75,9 @@ char * islog_version(){
 #define ISLOG_BUFF_MAX_LEN 10240000
 #define ISLOG_NEWLINE_SIGN                        "\n"
 
+/* FILE默认设置 */
+#define ISLOG_FILE_DEFAULT_SETTING "./log, app.log, 1000, 100"
+
 /* level的输出定义，简化写法 */
 static const char *level_string[] = {
         [ISLOG_LVL_ERROR-1]   = "ERROR",
@@ -96,12 +101,9 @@ static struct _islog_logger{
         int (*func_mask)(char * buf);
     }filter;
     struct _output{
-        int (*func_output)(islog_output_enum type, char * buff, int len);
+        int (*func_output)(islog_output_enum type, char * buff, int len, char * attr, pthread_mutex_t *mutex);
         int output_idx;
-        char para1[256]; /*文件名称*/
-        char para2[64];  /*切换路径*/
-        char para3[64];  /*保留日期*/
-        char attr[1024]; /*其他属性*/
+        char attr[1024]; /*输出属性*/
         pthread_mutex_t mutex; /*输出锁*/
     }output;
 }islogger[ISLOG_TAG_NUM];
@@ -115,7 +117,10 @@ static __thread struct _islogger_mask{
 }islogger_mask;
 
 static int default_func_format(islog_fmtidx_enum fmttype, char * old, char * new);
-static int default_func_output(islog_output_enum type, char * buff, int len);
+static int default_func_output(islog_output_enum type, char * buff, int len,char * attr, pthread_mutex_t *mutex);
+static int islogger_find(const char * tag);
+static int islogger_init(int i);
+
 
 /*********************************************************************************
  * 主函数
@@ -132,53 +137,14 @@ void islog_output(int level, const char *tag, const char *file, const char * fun
 
     /*** 零、根据tag获取当前的配置信息 ***/
     int i = 0;
-    int isfind = 0;
-    while(i < ISLOG_TAG_NUM){
-        /* 找到了则退出 */
-        if( strcmp( islogger[i].tag, tag) == 0) {
-            isfind = 1;
-            break;
-        }
-        /* 从未设置,则第一次获取 */
-        if( strlen( islogger[i].tag) == 0){
-            isfind = 1;
-            break;
-        }
-        /** 继续查找 **/
-        i++;
-    }
-    if( isfind != 1){
+    i = islogger_find( tag);
+    if( i < 0){
         printf("tag can't find and tag num is full--[%s]!!!\n", tag);
-        return;
+        return ;
     }
 
     /*** 一、如果没有初始化过，则设置默认值 ***/
-    if( islogger[i].isinit == 0){
-
-        /** tag 设置 **/
-        strncpy( islogger[i].tag, tag, ISLOG_TAGNAME_LEN);
-        /** 日志级别-默认为DEBUG **/
-        if( islogger[i].level == 0){
-            islogger[i].level = ISLOG_LVL_DEBUG;
-        }
-
-        /** 格式信息-默认 **/
-        if( islogger[i].format.format_idx == 0) //默认输出格式
-            islogger[i].format.format_idx = ISLOG_FMT_ALL;
-        if( islogger[i].format.func_format == NULL)
-            islogger[i].format.func_format = default_func_format;
-
-        /** 输出方式-默认为console **/
-        if( islogger[i].output.output_idx == 0){
-            islogger[i].output.output_idx = ISLOG_OUTPUT_CONSOLE;
-        }
-        if( islogger[i].output.func_output == NULL){
-            islogger[i].output.func_output  = default_func_output;
-        }
-
-        /** 必须要放到最后面,要不然就加锁，多线程高并发的情况下，可能被执行多遍，不过没关系 **/
-        islogger[i].isinit = 1;
-    }
+    islogger_init(i);
 
     /*** 二、动态判断日志级别是否可用 ***/
     if (level > islogger[i].level){
@@ -254,31 +220,32 @@ void islog_output(int level, const char *tag, const char *file, const char * fun
     }
     /** 2. 组成日志体 **/
     va_start(ap, fmtstr);
-    n = vsnprintf(NULL, 0, fmtstr, ap) + 1 + strlen(head);
+    n = vsnprintf(NULL, 0, fmtstr, ap) + strlen(head) + 1;
     va_end(ap);
     if( n >= ISLOG_BUFF_MAX_LEN){
         /** 如果太长，则截断 **/
         n = ISLOG_BUFF_MAX_LEN;
     }
-    buff = calloc(n, sizeof(char));
+    buff = calloc(n + 1, sizeof(char));
     if( buff == NULL){
         printf("can't calloc buff, [%s]\n", strerror(errno));
         return;
     }
     memcpy( buff, head, strlen(head));
     va_start(ap, fmtstr);
-    vsnprintf(buff + strlen(head), n - strlen(head), fmtstr, ap);
+    vsnprintf(buff + strlen(head), n - strlen(head) + 1, fmtstr, ap);
     va_end(ap);
+    strcat( buff, ISLOG_NEWLINE_SIGN);
 
     /*** 四、按照filter进行过滤 ***/
     //TODO
 
     /*** 五、输出 ***/
     if( islogger[i].output.output_idx & ISLOG_OUTPUT_CONSOLE){
-        islogger[i].output.func_output(ISLOG_OUTPUT_CONSOLE, buff, n);
+        islogger[i].output.func_output(ISLOG_OUTPUT_CONSOLE, buff, n, islogger[i].output.attr, &(islogger[i].output.mutex));
     }
     if( islogger[i].output.output_idx & ISLOG_OUTPUT_FILE){
-        islogger[i].output.func_output(ISLOG_OUTPUT_FILE, buff, n);
+        islogger[i].output.func_output(ISLOG_OUTPUT_FILE, buff, n, islogger[i].output.attr, &(islogger[i].output.mutex));
     }
 
     /***  结束 ***/
@@ -286,6 +253,67 @@ void islog_output(int level, const char *tag, const char *file, const char * fun
     buff = NULL;
     return ;
 }
+/*** 辅助函数 ***/
+static int islogger_find(const char * tag){
+    int i = 0;
+    int isfind = 0;
+    while(i < ISLOG_TAG_NUM){
+        /* 找到了则退出 */
+        if( strcmp( islogger[i].tag, tag) == 0) {
+            isfind = 1;
+            break;
+        }
+        /* 从未设置,则第一次获取 */
+        if( strlen( islogger[i].tag) == 0){
+            /** tag 设置,线程安全 TODO **/
+            strncpy( islogger[i].tag, tag, ISLOG_TAGNAME_LEN);
+            isfind = 1;
+            break;
+        }
+        /** 继续查找 **/
+        i++;
+    }
+    if( isfind != 1){
+        return -1;
+    }
+
+    return 0;
+}
+
+static int islogger_init(int i){
+    if( islogger[i].isinit == 0){
+        /** 日志级别-默认为DEBUG **/
+        if( islogger[i].level == 0){
+            islogger[i].level = ISLOG_LVL_DEBUG;
+        }
+
+        /** 格式信息-默认 **/
+        if( islogger[i].format.format_idx == 0) //默认输出格式
+            islogger[i].format.format_idx = ISLOG_FMT_ALL;
+        if( islogger[i].format.func_format == NULL)
+            islogger[i].format.func_format = default_func_format;
+
+        /** 输出方式-默认为console **/
+        if( islogger[i].output.output_idx == 0){
+            islogger[i].output.output_idx = ISLOG_OUTPUT_CONSOLE|ISLOG_OUTPUT_FILE;
+        }
+        if( islogger[i].output.func_output == NULL){
+            islogger[i].output.func_output  = default_func_output;
+        }
+        if( strlen( islogger[i].output.attr) == 0){
+            strcpy( islogger[i].output.attr, ISLOG_FILE_DEFAULT_SETTING);
+        }
+        pthread_mutex_init(&(islogger[i].output.mutex), NULL);
+
+        /** 必须要放到最后面,要不然就加锁，多线程高并发的情况下，可能被执行多遍，不过没关系 **/
+        islogger[i].isinit = 1;
+    }
+
+    return 0;
+}
+/**********************************************
+ * 默认的回调函数
+ *********************************************/
 
 /** 默认的日志格式,可以自定义该函数进行回调（重写）**/
 static int default_func_format(islog_fmtidx_enum fmttype, char * old, char * new){
@@ -328,58 +356,91 @@ static int default_func_format(islog_fmtidx_enum fmttype, char * old, char * new
 }
 
 /** 默认输出方式，可以回调重写 **/
-static int default_func_output(islog_output_enum type, char * buff, int len){
+static int islogger_file_rotate(FILE ** p_fp, char * path, char * name, int * pos);
+static int default_func_output(islog_output_enum type, char * buff, int len, char * attr, pthread_mutex_t * mutex){
     if( type == ISLOG_OUTPUT_CONSOLE) {
-        fprintf(stdout, "%s%s", buff, ISLOG_NEWLINE_SIGN);
+        fprintf(stdout, "%s", buff);
     }else if( type == ISLOG_OUTPUT_FILE){
-        //TODO
-        fprintf(stdout, "%s%s", buff, ISLOG_NEWLINE_SIGN);
+        static __thread FILE * islog_file_fp = NULL;
+        static char islog_file_path[256];
+        static char islog_file_name[256];
+        static int islog_file_rotatesize = 0;
+        static int islog_file_init = 0;
+        static int islog_file_cycnum = 0;
+        static int islog_file_pos = 0;
+        char filename[512];
+
+        int file_size = 0;
+        char value[256];
+        /** 初始化配置 **/
+        if( islog_file_init == 0){
+            isstr_split(attr, ",", 1, islog_file_path);
+            isstr_trim(islog_file_path);
+            isstr_split(attr, ",", 2, islog_file_name);
+            isstr_trim(islog_file_name);
+            isstr_split(attr, ",", 3, value);
+            islog_file_rotatesize = atoi( isstr_trim(value));
+            isstr_split(attr, ",", 4, value);
+            islog_file_cycnum = atoi( isstr_trim(value));
+            /* 可重入 */
+            if( islog_file_pos == 0){
+                islog_file_pos = 1;
+            }
+
+            islog_file_init = 1;
+        }
+
+        /** 如果fp为空的话，加锁重新打开文件 **/
+        if( islog_file_fp == NULL){
+//            pthread_mutex_lock(mutex);
+            if( islog_file_fp == NULL) {
+                snprintf( filename, sizeof(filename) - 1, "%s/%s", islog_file_path, islog_file_name);
+                islog_file_fp = fopen(filename, "a+");
+                if (islog_file_fp == NULL) {
+//                    pthread_mutex_unlock(mutex);
+                    printf("open log file error[%s]\n", filename);
+                    return -5;
+                }
+            }
+//            pthread_mutex_unlock(mutex);
+        }
+
+        /** 判断文件大小，决定是否换文件 **/
+        fseek(islog_file_fp, 0L, SEEK_END);
+        file_size = ftell(islog_file_fp);
+        if( file_size >= islog_file_rotatesize){
+            /* 加锁来进行切换，切换过程中，大家都要锁住 */
+//            pthread_mutex_lock(mutex);
+            if( islog_file_fp != NULL){
+                islogger_file_rotate(&islog_file_fp, islog_file_path, islog_file_name, &islog_file_pos);
+            }
+//            pthread_mutex_unlock(mutex);
+        }
+
+        fwrite(buff, len , sizeof(char), islog_file_fp);
+//        fflush(islog_file_fp);
     }
     return 0;
 }
 
-#if 0
-/* REDIS的serverlog, TODO待修改 */
-void serverLogRaw(int level, const char *msg) {
-    const int syslogLevelMap[] = { LOG_DEBUG, LOG_INFO, LOG_NOTICE, LOG_WARNING };
-    const char *c = ".-*#";
-    FILE *fp;
-    char buf[64];
-    int rawmode = (level & LL_RAW);
-    int log_to_stdout = server.logfile[0] == '\0';
+static int islogger_file_rotate(FILE ** p_fp, char * path, char * name, int * pos){
+    char oldpath[256], newpath[256];
+    FILE *tmp_fp;
 
-    level &= 0xff; /* clear flags */
-    if (level < server.verbosity) return;
+    fclose(*p_fp);
+    *p_fp = NULL;
 
-    fp = log_to_stdout ? stdout : fopen(server.logfile,"a");
-    if (!fp) return;
-
-    if (rawmode) {
-        fprintf(fp,"%s",msg);
-    } else {
-        int off;
-        struct timeval tv;
-        int role_char;
-        pid_t pid = getpid();
-
-        gettimeofday(&tv,NULL);
-        struct tm tm;
-        nolocks_localtime(&tm,tv.tv_sec,server.timezone,server.daylight_active);
-        off = strftime(buf,sizeof(buf),"%d %b %Y %H:%M:%S.",&tm);
-        snprintf(buf+off,sizeof(buf)-off,"%03d",(int)tv.tv_usec/1000);
-        if (server.sentinel_mode) {
-            role_char = 'X'; /* Sentinel. */
-        } else if (pid != server.pid) {
-            role_char = 'C'; /* RDB / AOF writing child. */
-        } else {
-            role_char = (server.masterhost ? 'S':'M'); /* Slave or Master. */
-        }
-        fprintf(fp,"%d:%c %s %c %s\n",
-                (int)getpid(),role_char, buf,c[level],msg);
+    snprintf(oldpath, sizeof(oldpath),"%s/%s.%d", path, name, *pos);
+    snprintf(newpath, sizeof(newpath),"%s/%s", path, name);
+    tmp_fp = fopen( oldpath, "r");
+    if( tmp_fp == NULL){
+        /*** 不存在才正常，则rename，如果存在，说明被其他人rename过了 ***/
+        rename(newpath, oldpath);
     }
-    fflush(fp);
 
-    if (!log_to_stdout) fclose(fp);
-    if (server.syslog_enabled) syslog(syslogLevelMap[level], "%s", msg);
+    *p_fp = fopen(newpath, "a+");
+
+    *pos = *pos + 1;
+
+    return 0;
 }
-#endif

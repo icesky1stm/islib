@@ -12,6 +12,7 @@ char * islog_version();
 /** 函数声明区 **/
 void islog_output(int level, const char *tag, const char *file, const char * func,
                   const long line, char *fmtstr, ...);
+
 /***********************************************
  * 一、 通过宏的方式控制日志是否输出，
  * 因为在预编译时执行,对效率完全没有影响
