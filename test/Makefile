@@ -13,7 +13,7 @@ OBJ  += isatom_test
 
 LIBS := islib.so
 
-CFLAGS  += -Wall -std=c99 -I../src/
+CFLAGS  += -Wall -std=c99 -g -I../src/
 
 LDFLAGS += ../islib.so
 

@@ -18,10 +18,10 @@ vpath %.h   src
 RM = rm -i
 
 #LIBS    := -lm -lpthread
-CFLAGS  += -Wall -std=c99 -fPIC
+CFLAGS  += -Wall -std=c99 -fPIC -g
 
 #CFLAGS  += -I$(OBJDIR)/include
-LDFLAGS += -shared
+LDFLAGS += -shared 
 
 .SUFFIXES: .c .so .o
 ### 操作系统特殊定义

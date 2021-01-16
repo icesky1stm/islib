@@ -6,12 +6,9 @@
 #define ISLOG_H
 
 /** 版本信息 **/
-#define ISLOG_VERSION_NO "21.01.1"
+#define ISLOG_VERSION_NO "21.01.2"
 char * islog_version();
 
-/** 函数声明区 **/
-void islog_output(int level, const char *tag, const char *file, const char * func,
-                  const long line, char *fmtstr, ...);
 
 /***********************************************
  * 一、 通过宏的方式控制日志是否输出，
@@ -98,9 +95,64 @@ typedef enum {
      ISLOG_OUTPUT_CONSOLE = 1 << 0,
      ISLOG_OUTPUT_FILE    = 1 << 1,
  } islog_output_enum;
+#define ISLOG_OUTPUT_NUM    2
 
-#define islog_error(...)  islog_error_t("DEFAULT", __VA_ARGS__)
-#define islog_warn(...)   islog_warn_t("DEFAULT", __VA_ARGS__)
-#define islog_info(...)   islog_info_t("DEFAULT", __VA_ARGS__)
-#define islog_debug(...)  islog_debug_t("DEFAULT", __VA_ARGS__)
+#define islog_error(...)  islog_error_t("", __VA_ARGS__)
+#define islog_warn(...)   islog_warn_t("", __VA_ARGS__)
+#define islog_info(...)   islog_info_t("", __VA_ARGS__)
+#define islog_debug(...)  islog_debug_t("", __VA_ARGS__)
+
+void islog_output(int level, const char *tag, const char *file, const char * func,
+                  const long line, char *fmtstr, ...);
+
+/***********************************************
+ * 四、对外函数
+ **********************************************/
+/*** tag值设置，多tag输出的场景必须设置,以下所有参数都有默认值 ***/
+int islogtag_set( char * tag);
+
+/** 开关对应tag的日志显示，默认tag为"" **/
+int islogtag_on( char * tag);
+int islogtag_off( char * tag);
+
+/*** 脱敏处理系列,无islog开头为无tag模式 ***/
+/** 设置脱敏位置 **/
+int islog_mask( int beg, int end);
+/** 设置脱敏字符，默认为'*' **/
+int islog_mask_symbol( char symbol);
+/** 按tag关闭脱敏处理，使islog_mask失效 **/
+int islogtag_mask_off(char * tag);
+int islog_mask_off();
+/** 按tag打开脱敏处理，使islog_mask生效，默认为打开 **/
+int islogtag_mask_on(char * tag);
+int islog_mask_on();
+/** 按tag设置日志输出级别,默认为debug **/
+int islogtag_level(char * tag, int level);
+int islog_level(int level);
+
+/*** 前缀格式定义 ***/
+/** 设置前缀显示哪些，默认都显示 **/
+int islogtag_format(char * tag, int fmtidx);
+int islog_format(char * tag, int fmtidx);
+/** 设置前缀显示格式的回调函数，不设置走默认值 **/
+int islogtag_formatfunc( char* tag, int(*func_format)(islog_fmtidx_enum fmttype, char * old, char * new));
+int islog_formatfunc(int(*func_format)(islog_fmtidx_enum fmttype, char * old, char * new));
+
+/*** 输出信息的定义 ***/
+/** 输出类型的定义，默认为终端输出 **/
+int islogtag_output_type(char * tag, int output_idx);
+int islog_output_type(int output_idx);
+/** 设置输出的回调函数，不设置走默认值 **/
+int islogtag_outputfunc( char* tag, int(*func_output)(islog_output_enum fmttype, char * buff, int len,char * attr, int i));
+int islog_outputfunc(int(*func_output)(islog_output_enum fmttype, char * buff, int len,char * attr, int i ));
+/** 设置日志文件的路径，不设置为./log **/
+int islogtag_filepath( char * tag, char *  filepath);
+int islog_filepath(char *  filepath);
+/** 设置日志文件的名字，不设置为app.$TAG.log **/
+int islogtag_filename( char * tag, char *  filename);
+int islog_filename( char * filename);
+/** 设置日志文件的切换文件大小，不设置为20M **/
+int islogtag_filecutsize( char * tag, int cut_size);
+int islog_filecutsize( int cut_size);
+
 #endif //ISLOG_H
