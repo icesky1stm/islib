@@ -5,8 +5,10 @@
 #ifndef ISTIME_H
 #define ISTIME_H
 #include <inttypes.h>
+#include <time.h>
+#include <sys/time.h>
 
-#define ISTIME_VERSION_NO "21.01.1"
+#define ISTIME_VERSION_NO "21.08.1"
 char * istime_version();
 
 /** 取当前时间的毫秒数 **/
@@ -35,5 +37,22 @@ long istime_longtime();
 
 /** 获取当日的日期，8位长 **/
 long istime_longdate();
+
+/** 获取当前时区的信息 **/
+
+
+unsigned long istime_timezone(void) {
+#if defined(__linux__) || defined(__sun)
+    printf("timezone\n\n");
+    return timezone;
+#else
+    struct timeval tv;
+    struct timezone tz;
+
+    gettimeofday(&tv, &tz);
+
+    return tz.tz_minuteswest * 60UL;
+#endif
+}
 
 #endif //ISTIME_H

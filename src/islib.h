@@ -7,7 +7,7 @@
 #ifndef ISLIB_H
 #define ISLIB_H
 
-#define ISLIB_VERSION_NO "21.01.1"
+#define ISLIB_VERSION_NO "21.08.1"
 
 char * islib_version();
 

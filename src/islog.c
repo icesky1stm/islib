@@ -47,11 +47,12 @@
 #include <pthread.h>
 #include <errno.h>
 #include <math.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "islog.h"
 
 #include "isstr.h"
-#include "istime.h"
 
 /** 版本信息 **/
 char * islog_version(){
@@ -132,6 +133,10 @@ void islog_log(int level, const char * file, const char *func, const long line, 
 #define isloglog_e(...)  islog_log(ISLOG_LVL_ERROR, __FILE__, __FUNCTION__, __LINE__, __VA_ARGS__)
 #define isloglog_i(...)  islog_log(ISLOG_LVL_INFO, __FILE__, __FUNCTION__, __LINE__, __VA_ARGS__)
 #define isloglog_w(...)  islog_log(ISLOG_LVL_WARN, __FILE__, __FUNCTION__, __LINE__, __VA_ARGS__)
+static long istime_longtime();
+static long istime_longdate();
+static char * istime_iso8601(char * strtime, uint32_t maxsize, uint64_t time_us);
+static uint64_t istime_us();
 
 
 /*********************************************************************************
@@ -679,3 +684,115 @@ reopen:
 
     return 0;
 }
+
+
+/**********************************************
+* 依赖的时间函数,使用的是istime 21.01.1 版本
+***********************************************/
+/** 获取当前时间，到微秒 **/
+static uint64_t istime_us(){
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return (t.tv_sec * 1000000) + t.tv_usec;
+}
+
+
+/** redis 重写的不会导致死锁的localtime **/
+static int is_leap_year(time_t year) {
+    if (year % 4) return 0;         /* A year not divisible by 4 is not leap. */
+    else if (year % 100) return 1;  /* If div by 4 and not 100 is surely leap. */
+    else if (year % 400) return 0;  /* If div by 100 *and* not by 400 is not leap. */
+    else return 1;                  /* If div by 100 and 400 is leap. */
+}
+
+static void nolocks_localtime(time_t *p_t, struct tm *tmp) {
+    /*** 在redis代码的基础上，做了修改  ***/
+    static int static_tz_set = 0;
+    int dst = 0; // 不支持夏令时，因为这是中国
+    if( static_tz_set == 0){
+        tzset();
+        static_tz_set = 1;
+    }
+
+    time_t t = *p_t;
+    const time_t secs_min = 60;
+    const time_t secs_hour = 3600;
+    const time_t secs_day = 3600*24;
+
+    t -= timezone;                      /* Adjust for timezone. */
+    t += 3600*dst;                      /* Adjust for daylight time. */
+    time_t days = t / secs_day;         /* Days passed since epoch. */
+    time_t seconds = t % secs_day;      /* Remaining seconds. */
+
+    tmp->tm_isdst = dst;
+    tmp->tm_hour = seconds / secs_hour;
+    tmp->tm_min = (seconds % secs_hour) / secs_min;
+    tmp->tm_sec = (seconds % secs_hour) % secs_min;
+
+    /* 1/1/1970 was a Thursday, that is, day 4 from the POV of the tm structure
+     * where sunday = 0, so to calculate the day of the week we have to add 4
+     * and take the modulo by 7. */
+    tmp->tm_wday = (days+4)%7;
+
+    /* Calculate the current year. */
+    tmp->tm_year = 1970;
+    while(1) {
+        /* Leap years have one day more. */
+        time_t days_this_year = 365 + is_leap_year(tmp->tm_year);
+        if (days_this_year > days) break;
+        days -= days_this_year;
+        tmp->tm_year++;
+    }
+    tmp->tm_yday = days;  /* Number of day of the current year. */
+
+    /* We need to calculate in which month and day of the month we are. To do
+     * so we need to skip days according to how many days there are in each
+     * month, and adjust for the leap year that has one more day in February. */
+    int mdays[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    mdays[1] += is_leap_year(tmp->tm_year);
+
+    tmp->tm_mon = 0;
+    while(days >= mdays[tmp->tm_mon]) {
+        days -= mdays[tmp->tm_mon];
+        tmp->tm_mon++;
+    }
+
+    tmp->tm_mday = days+1;  /* Add 1 since our 'days' is zero-based. */
+    tmp->tm_year -= 1900;   /* Surprisingly tm_year is year-1900. */
+}
+
+static uint32_t istime_strftime(char * strtime, uint32_t maxsize, const char * format, uint64_t time_us){
+    struct timeval t;
+    t.tv_sec = time_us / 1000000;
+    //t.tv_usec = time_us % 1000000;
+
+    struct tm local_time;
+
+    /*** TODO 可能会锁，后续改为redis的 nonblock_localtime 写法 ***/
+    nolocks_localtime( &t.tv_sec, &local_time);
+    return strftime(strtime, maxsize, format, &local_time);
+}
+/** iso8601格式的 **/
+static char * istime_iso8601(char * strtime, uint32_t maxsize, uint64_t time_us){
+    char format[]="%Y-%m-%dT%H:%M:%S";
+    // 至少 19 位;
+    // 2020-12-31T12:12:12
+    istime_strftime( strtime, maxsize, format, time_us);
+    return strtime;
+}
+static long istime_longtime(){
+    time_t t = time(0);
+    struct tm local_time;
+
+    nolocks_localtime(&t, &local_time);
+    return local_time.tm_hour*10000 + local_time.tm_min*100 + local_time.tm_sec;
+}
+
+static long istime_longdate(){
+    time_t t = time(0);
+    struct tm local_time;
+
+    nolocks_localtime(&t, &local_time);
+    return (local_time.tm_year+1900)*10000 + (local_time.tm_mon+1)*100 + local_time.tm_mday;
+}
+

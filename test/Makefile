@@ -27,7 +27,7 @@ $(BIN): $(OBJ)
 
 .PHONY: clean
 clean:
-	rm -f *_test *_tmp
+	rm -rf *_test *_tmp *dSYM/ ./log/*
 
 %.c:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) -o $@ $<

@@ -6,7 +6,7 @@
 #define ISLOG_H
 
 /** 版本信息 **/
-#define ISLOG_VERSION_NO "21.01.2"
+#define ISLOG_VERSION_NO "21.01.3"
 char * islog_version();
 
 
